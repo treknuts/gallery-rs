@@ -36,9 +36,6 @@ struct Painting {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenv().ok();
-    let pool = MySqlPool::connect(&std::env::var("DATABASE_URL")?).await?;
-
     let server_config = ServerConfig {
         host: String::from("127.0.0.1"),
         port: 3000,
@@ -57,6 +54,13 @@ async fn main() -> anyhow::Result<()> {
         .await
         .unwrap();
     Ok(())
+}
+
+async fn create_database_pool() -> Result<MySqlPool, sqlx::Error> {
+    dotenv().ok();
+    let pool = MySqlPool::connect(&std::env::var("DATABASE_URL").to_string()).await?;
+
+    Ok(pool)
 }
 
 async fn get_artists(
