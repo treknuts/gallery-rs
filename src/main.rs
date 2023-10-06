@@ -1,7 +1,7 @@
-use axum::{extract::State, routing::get, Json, Router};
+use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
-use sqlx::mysql::MySqlPool;
+use sqlx::{mysql::MySqlPool, FromRow};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 #[derive(Clone)]
@@ -11,7 +11,7 @@ pub struct ServerConfig {
     pub pool: MySqlPool,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, FromRow)]
 struct Gallery {
     id: i32,
     title: String,
@@ -19,14 +19,14 @@ struct Gallery {
     country: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, FromRow)]
 struct Artist {
     id: i32,
     name: String,
     age: i32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, FromRow)]
 struct Painting {
     id: i32,
     title: String,
@@ -46,10 +46,9 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let app = Router::new()
-        .with_state(server_config)
-        .route("/", get(index))
         .route("/artists", get(get_artists))
-        .route("/paintings", get(paintings));
+        .route("/paintings", get(get_paintings))
+        .with_state(server_config);
 
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3000);
 
@@ -60,65 +59,29 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn index() -> &'static str {
-    "Hello, Axum!"
+async fn get_artists(
+    State(server_config): State<ServerConfig>,
+) -> Result<Json<Vec<Artist>>, (StatusCode, String)> {
+    let artists = sqlx::query_as!(Artist, "SELECT * FROM artists ORDER BY id")
+        .fetch_all(&server_config.pool)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Houston...we have a problem"),
+            )
+        })?;
+
+    Ok(Json(artists))
 }
 
-async fn artists() -> &'static str {
-    "Hello, artists"
-}
+async fn get_paintings(
+    State(server_config): State<ServerConfig>,
+) -> Result<Json<Vec<Painting>>, (StatusCode, String)> {
+    let paintings = sqlx::query_as!(Painting, "SELECT * FROM paintings")
+        .fetch_all(&server_config.pool)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, format!("Oopsie Daisy")))?;
 
-async fn paintings() -> &'static str {
-    "Hello, paintings"
-}
-
-async fn get_artists(State(server_config): State<ServerConfig>) -> anyhow::Result<()> {
-    let artists: Vec<Artist> = sqlx::query!(
-        r#"
-    SELECT *
-    FROM artists
-    ORDER BY id
-    "#
-    )
-    .fetch_all(&server_config.pool)
-    .await?
-    .iter()
-    .map(|artist| Artist {
-        id: artist.id.clone(),
-        name: artist.name.clone().unwrap().clone(),
-        age: artist.age.unwrap().clone(),
-    })
-    .collect();
-
-    println!("{}", artists.len());
-
-    Ok(())
-}
-
-async fn get_paintings(State(server_config): State<ServerConfig>) -> anyhow::Result<()> {
-    let results = sqlx::query!(
-        r#"
-    SELECT p.title, a.name, g.title as gallery_name
-    FROM paintings as p, artists as a, galleries as g
-    WHERE p.artist_id = a.id AND p.gallery_id = g.id
-    ORDER BY a.name
-    "#
-    )
-    .fetch_all(&server_config.pool)
-    .await?;
-
-    for row in results {
-        println!(
-            r#"
-        {}
-            by {}
-            displayed in {}
-        "#,
-            &row.title.unwrap(),
-            &row.name.unwrap(),
-            &row.gallery_name.unwrap()
-        );
-    }
-
-    Ok(())
+    Ok(Json(paintings))
 }

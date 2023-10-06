@@ -1,0 +1,138 @@
+use axum::{extract::Query, extract::State, response::Json, routing::get, Router};
+use dotenv::dotenv;
+use rand::{thread_rng, Rng};
+use serde::{Deserialize, Serialize};
+use sqlx::mysql::MySqlPool;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+#[derive(Clone)]
+pub struct ServerConfig {
+    pub host: String,
+    pub port: u16,
+    pub pool: MySqlPool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Gallery {
+    id: i32,
+    title: String,
+    city: String,
+    country: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct Artist {
+    id: i32,
+    name: String,
+    age: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Painting {
+    id: i32,
+    title: String,
+    gallery_id: i32,
+    artist_id: i32,
+}
+
+#[derive(Deserialize)]
+struct RangeParam {
+    start: usize,
+    end: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+struct RandomResponse {
+    start: usize,
+    end: usize,
+    random: usize,
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    dotenv().ok();
+    let pool = MySqlPool::connect(&std::env::var("DATABASE_URL")?).await?;
+
+    let server_config = ServerConfig {
+        host: String::from("127.0.0.1"),
+        port: 3000,
+        pool: pool,
+    };
+
+    let app = Router::new()
+        .with_state(server_config)
+        .route("/", get(index))
+        .route("/random", get(random))
+        .route("/artists", get(get_artists))
+        .route("/paintings", get(paintings));
+
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3000);
+
+    axum::Server::bind(&addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+    Ok(())
+}
+
+async fn index() -> &'static str {
+    "Hello, Axum!"
+}
+
+async fn random(Query(range): Query<RangeParam>) -> Json<RandomResponse> {
+    let number = thread_rng().gen_range(range.start..range.end);
+
+    Json(RandomResponse {
+        start: range.start,
+        end: range.end,
+        random: number,
+    })
+}
+
+async fn paintings() -> &'static str {
+    "Hello, paintings"
+}
+
+async fn get_artists(State(server_config): State<ServerConfig>) -> Option<Json<Vec<Artist>>> {
+    let artists: Vec<Artist> = sqlx::query(
+        r#"
+    SELECT *
+    FROM artists
+    ORDER BY id
+    "#,
+    )
+    .fetch_all(&server_config.pool)
+    .await
+.unwrap()
+    .ok()?;
+
+    Some(Json(artists))
+}
+
+// async fn get_paintings(State(server_config): State<ServerConfig>) -> anyhow::Result<()> {
+//     let results = sqlx::query!(
+//         r#"
+//     SELECT p.title, a.name, g.title as gallery_name
+//     FROM paintings as p, artists as a, galleries as g
+//     WHERE p.artist_id = a.id AND p.gallery_id = g.id
+//     ORDER BY a.name
+//     "#
+//     )
+//     .fetch_all(&server_config.pool)
+//     .await?;
+//
+//     for row in results {
+//         println!(
+//             r#"
+//         {}
+//             by {}
+//             displayed in {}
+//         "#,
+//             &row.title.unwrap(),
+//             &row.name.unwrap(),
+//             &row.gallery_name.unwrap()
+//         );
+//     }
+//
+//     Ok(())
+// }
