@@ -36,6 +36,10 @@ struct Painting {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    dotenv().ok();
+    let db_url = std::env::var("DATABASE_URL").expect("missing DATABASE_URL");
+    let pool = MySqlPool::connect(&db_url).await?;
+
     let server_config = ServerConfig {
         host: String::from("127.0.0.1"),
         port: 3000,
@@ -56,13 +60,6 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn create_database_pool() -> Result<MySqlPool, sqlx::Error> {
-    dotenv().ok();
-    let pool = MySqlPool::connect(&std::env::var("DATABASE_URL").to_string()).await?;
-
-    Ok(pool)
-}
-
 async fn get_artists(
     State(server_config): State<ServerConfig>,
 ) -> Result<Json<Vec<Artist>>, StatusCode> {
@@ -71,8 +68,8 @@ async fn get_artists(
         .await;
 
     match res {
-        Ok(artists) => Json(artists),
-        Err(_) => Http::INTERNAL_SERVER_ERROR,
+        Ok(artists) => Ok(Json(artists)),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 
@@ -85,6 +82,6 @@ async fn get_paintings(
 
     match res {
         Ok(paintings) => Ok(Json(paintings)),
-        Err(_) => Http::INTERNAL_SERVER_ERROR,
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
