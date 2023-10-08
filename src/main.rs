@@ -65,27 +65,26 @@ async fn create_database_pool() -> Result<MySqlPool, sqlx::Error> {
 
 async fn get_artists(
     State(server_config): State<ServerConfig>,
-) -> Result<Json<Vec<Artist>>, (StatusCode, String)> {
-    let artists = sqlx::query_as!(Artist, "SELECT * FROM artists ORDER BY id")
+) -> Result<Json<Vec<Artist>>, StatusCode> {
+    let res = sqlx::query_as!(Artist, "SELECT * FROM artists ORDER BY id")
         .fetch_all(&server_config.pool)
-        .await
-        .map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Houston...we have a problem"),
-            )
-        })?;
+        .await;
 
-    Ok(Json(artists))
+    match res {
+        Ok(artists) => Json(artists),
+        Err(_) => Http::INTERNAL_SERVER_ERROR,
+    }
 }
 
 async fn get_paintings(
     State(server_config): State<ServerConfig>,
-) -> Result<Json<Vec<Painting>>, (StatusCode, String)> {
-    let paintings = sqlx::query_as!(Painting, "SELECT * FROM paintings")
+) -> Result<Json<Vec<Painting>>, StatusCode> {
+    let res = sqlx::query_as!(Painting, "SELECT * FROM paintings")
         .fetch_all(&server_config.pool)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, format!("Oopsie Daisy")))?;
+        .await;
 
-    Ok(Json(paintings))
+    match res {
+        Ok(paintings) => Ok(Json(paintings)),
+        Err(_) => Http::INTERNAL_SERVER_ERROR,
+    }
 }
