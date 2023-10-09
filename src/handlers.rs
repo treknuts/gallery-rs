@@ -41,6 +41,23 @@ pub async fn create_artist(
     }
 }
 
+pub async fn create_painting(
+    State(pool): State<MySqlPool>,
+    Json(new_painting): Json<Painting>,
+) -> Result<(StatusCode, Json<Painting>), StatusCode> {
+    let res = sqlx::query("INSERT INTO paintings (title, artist_id, gallery_id) values (?, ?, ?)")
+        .bind(&new_painting.title)
+        .bind(&new_painting.artist_id)
+        .bind(&new_painting.gallery_id)
+        .execute(&pool)
+        .await;
+
+    match res {
+        Ok(_) => Ok((StatusCode::CREATED, Json(new_painting))),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
 pub async fn get_artist_with_paintings(
     State(pool): State<MySqlPool>,
     Path(id): Path<i32>,
