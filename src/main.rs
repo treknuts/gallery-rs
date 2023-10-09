@@ -1,5 +1,5 @@
 mod handlers;
-use axum::{routing::get, Router};
+use axum::{routing::get, routing::post, Router};
 use dotenv::dotenv;
 use sqlx::mysql::MySqlPool;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -25,6 +25,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/artists", get(handlers::get_artists))
+        .route("/artists", post(handlers::create_artists))
         .route("/paintings", get(handlers::get_paintings))
         .with_state(server_config.pool);
 
