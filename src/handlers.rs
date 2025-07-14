@@ -25,6 +25,12 @@ pub struct ArtistWithPaintings {
     paintings: Vec<Painting>,
 }
 
+#[derive(Serialize)]
+pub struct PaintingWithArtist {
+    name: String,
+    artist: String,
+}
+
 pub async fn create_artist(
     State(pool): State<MySqlPool>,
     Json(new_artist): Json<Artist>,
@@ -91,6 +97,39 @@ pub async fn get_artist_with_paintings(
     Ok(Json(res))
 }
 
+pub async fn get_painting_with_artist(
+    State(pool): State<MySqlPool>,
+    Path(id): Path<i32>,
+) -> Result<Json<PaintingWithArtist>, (StatusCode, String)> {
+    let painting_query = sqlx::query_as::<_, Painting>("SELECT * FROM paintings where id = ?")
+        .bind(id)
+        .fetch_one(&pool)
+        .await;
+
+    let painting = match painting_query {
+        Ok(a) => a,
+        Err(e) => return Err((StatusCode::NOT_FOUND, e.to_string())),
+    };
+
+    let artist_query =
+        sqlx::query_as::<_, Artist>("SELECT * FROM artists WHERE id = ?")
+            .bind(painting.artist_id)
+            .fetch_one(&pool)
+            .await;
+
+    let artist = match artist_query {
+        Ok(p) => p,
+        Err(e) => return Err((StatusCode::NOT_FOUND, e.to_string())),
+    };
+
+    let res = PaintingWithArtist {
+        name: painting.title,
+        artist: artist.name,
+    };
+
+    Ok(Json(res))
+}
+
 pub async fn get_artists(State(pool): State<MySqlPool>) -> Result<Json<Vec<Artist>>, StatusCode> {
     let res = sqlx::query_as!(Artist, "SELECT * FROM artists ORDER BY id")
         .fetch_all(&pool)
@@ -108,8 +147,8 @@ pub async fn get_paintings(
     let res = sqlx::query_as!(
         Painting,
         r#"
-        SELECT * 
-        FROM paintings 
+        SELECT *
+        FROM paintings
         "#,
     )
     .fetch_all(&pool)
